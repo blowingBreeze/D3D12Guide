@@ -12,6 +12,7 @@ class FrameWorkBase
 public:
     FrameWorkBase();
     virtual void Init(HINSTANCE hInstance,int nCmdShow);
+    virtual int Run();
     static LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 protected:
     void InitWindow(HINSTANCE hInstance, int nCmdShow);

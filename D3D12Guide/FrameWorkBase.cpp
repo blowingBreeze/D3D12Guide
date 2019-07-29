@@ -16,6 +16,21 @@ void FrameWorkBase::Init(HINSTANCE hInstance, int nCmdShow)
     InitSwapChain();
 }
 
+int FrameWorkBase::Run()
+{
+    MSG msg = {};
+    while (msg.message != WM_QUIT)
+    {
+        // Process any messages in the queue.
+        if (PeekMessage(&msg, mhMainWind, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+    return static_cast<char>(msg.wParam);
+}
+
 LRESULT FrameWorkBase::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     return DefWindowProc(hWnd, message, wParam, lParam);
@@ -112,18 +127,20 @@ void FrameWorkBase::InitSwapChain()
     mSwapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     mSwapChainDesc.BufferDesc.RefreshRate.Numerator = 60;
     mSwapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
+    mSwapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER::DXGI_MODE_SCANLINE_ORDER_LOWER_FIELD_FIRST;
+    mSwapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING::DXGI_MODE_SCALING_CENTERED;
     mSwapChainDesc.Windowed = true;
     mSwapChainDesc.OutputWindow = mhMainWind;
     mSwapChainDesc.BufferCount = 2;
     mSwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    mSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    mSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT::DXGI_SWAP_EFFECT_FLIP_DISCARD;
     mSwapChainDesc.SampleDesc.Count = 1;
-    mSwapChainDesc.SampleDesc.Quality = 1;
+    mSwapChainDesc.SampleDesc.Quality = 0;
 
     ThrowIfFailed(mD3DFactory->CreateSwapChain(
         mCommandQueue.Get(),       // Swap chain needs the queue so that it can force a flush on it.
         &mSwapChainDesc,
-        mSwapChain.GetAddressOf()
+        mSwapChain.GetAddressOf() 
     ));
 }
 

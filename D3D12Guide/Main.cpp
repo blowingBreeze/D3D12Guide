@@ -82,8 +82,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)
 
     FrameWorkBase frameWork;
     frameWork.Init(hInstance, nCmdShow);
-
-    return 0;
+    return frameWork.Run();
 }
 
 // 运行程序: Ctrl + F5 或调试 >“开始执行(不调试)”菜单
