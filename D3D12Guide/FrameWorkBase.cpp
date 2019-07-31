@@ -14,6 +14,8 @@ void FrameWorkBase::Init(HINSTANCE hInstance, int nCmdShow)
     InitFence();
     InitGraphicsCommand();
     InitSwapChain();
+    InitDescriptorHeap();
+    InitRenderTargets();
 }
 
 int FrameWorkBase::Run()
@@ -131,7 +133,7 @@ void FrameWorkBase::InitSwapChain()
     mSwapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING::DXGI_MODE_SCALING_CENTERED;
     mSwapChainDesc.Windowed = true;
     mSwapChainDesc.OutputWindow = mhMainWind;
-    mSwapChainDesc.BufferCount = 2;
+    mSwapChainDesc.BufferCount = BUFFER_COUNT;
     mSwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     mSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT::DXGI_SWAP_EFFECT_FLIP_DISCARD;
     mSwapChainDesc.SampleDesc.Count = 1;
@@ -159,6 +161,19 @@ void FrameWorkBase::InitDescriptorHeap()
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     dsvHeapDesc.NodeMask = 0;
     ThrowIfFailed(mD3DDevice->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
+}
+
+void FrameWorkBase::InitRenderTargets()
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRtvHeap->GetCPUDescriptorHandleForHeapStart());
+
+    // Create a RTV for each frame.
+    for (UINT n = 0; n < BUFFER_COUNT; n++)
+    {
+        ThrowIfFailed(mSwapChain->GetBuffer(n, IID_PPV_ARGS(&mRenderTargets[n])));
+        mD3DDevice->CreateRenderTargetView(mRenderTargets[n].Get(), nullptr, rtvHandle);
+        rtvHandle.ptr += mRtvDescriptorSize;
+    }
 }
 
 

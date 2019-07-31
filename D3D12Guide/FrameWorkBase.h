@@ -7,6 +7,7 @@
 #include <dxgi1_4.h>
 
 using namespace Microsoft::WRL;
+static const int BUFFER_COUNT = 2;
 class FrameWorkBase
 {
 public:
@@ -21,6 +22,7 @@ protected:
     void InitGraphicsCommand();
     void InitSwapChain();
     void InitDescriptorHeap();
+    void InitRenderTargets();
 
 protected:
     UINT mWidth;
@@ -40,6 +42,7 @@ protected:
     ComPtr<IDXGISwapChain> mSwapChain;
     ComPtr<ID3D12DescriptorHeap> mRtvHeap;
     ComPtr<ID3D12DescriptorHeap> mDsvHeap;
+    ComPtr<ID3D12Resource> mRenderTargets[BUFFER_COUNT];
 };
 
 inline std::string HrToString(HRESULT hr)
