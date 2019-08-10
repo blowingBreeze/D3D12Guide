@@ -1,12 +1,16 @@
 #pragma once
 
 
-#include<stdexcept>
-#include<wrl.h>
-#include<d3d12.h>
+#include <stdexcept>
+#include <wrl.h>
+#include <d3d12.h>
 #include <dxgi1_4.h>
+#include <d3dcompiler.h>
+#include <DirectXMath.h>
 
 using namespace Microsoft::WRL;
+using namespace DirectX;
+
 static const int BUFFER_COUNT = 2;
 class FrameWorkBase
 {
@@ -23,13 +27,36 @@ protected:
     void InitSwapChain();
     void InitDescriptorHeap();
     void InitRenderTargets();
+    void InitRootSignature();
+    void InitShader();
+    void InitVertex();
 
 protected:
+    void WaitForPreviousFrame();
+    void PopulateCommandList();
+
+protected:
+    void OnUpdate();
+    void OnRender();
+
+protected:
+    HWND mhMainWind;
     UINT mWidth;
     UINT mHeight;
     DXGI_SWAP_CHAIN_DESC  mSwapChainDesc;
+    UINT64 mFenceValue;
+    HANDLE mFenceEvent;
+    UINT mFrameIndex;
+
+    struct Vertex
+    {
+        XMFLOAT3 position;
+        XMFLOAT4 color;
+    };
 protected:
-    HWND mhMainWind;
+
+    D3D12_VIEWPORT mViewport;
+    D3D12_RECT mScissorRect;
     UINT mRtvDescriptorSize;
     UINT mDsvDescriptorSize;
     UINT mCbvUavDescriptorSize;
@@ -39,10 +66,14 @@ protected:
     ComPtr<ID3D12CommandQueue> mCommandQueue;
     ComPtr<ID3D12CommandAllocator> mDirectCmdListAlloc;
     ComPtr<ID3D12GraphicsCommandList> mCommandList;
-    ComPtr<IDXGISwapChain> mSwapChain;
+    ComPtr<IDXGISwapChain3> mSwapChain;
     ComPtr<ID3D12DescriptorHeap> mRtvHeap;
     ComPtr<ID3D12DescriptorHeap> mDsvHeap;
     ComPtr<ID3D12Resource> mRenderTargets[BUFFER_COUNT];
+    ComPtr<ID3D12RootSignature> mRootSignature;
+    ComPtr<ID3D12PipelineState> mPipelineState;
+    ComPtr<ID3D12Resource> mVertexBuffer;
+    D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
 };
 
 inline std::string HrToString(HRESULT hr)

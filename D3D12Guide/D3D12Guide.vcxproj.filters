@@ -7,6 +7,12 @@
     <Filter Include="FrameWork">
       <UniqueIdentifier>{46d5939e-e40f-48a3-9eb2-a16963ee833c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Assets">
+      <UniqueIdentifier>{74743c0e-f87f-4936-a19d-b0f4e6a12abb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Assets\Shaders">
+      <UniqueIdentifier>{b5d4b7cc-3960-49d9-ac29-8a50b5b4c9a3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -20,5 +26,10 @@
     <ClInclude Include="FrameWorkBase.h">
       <Filter>FrameWork</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="Assets\Shaders\shaders.hlsl">
+      <Filter>Assets\Shaders</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>
