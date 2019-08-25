@@ -155,11 +155,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FrameWorkBase.cpp" />
+    <ClCompile Include="FrameWork\FrameWorkBase.cpp" />
+    <ClCompile Include="InitializeGuide\InitializeGuide.cpp" />
     <ClCompile Include="Main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FrameWorkBase.h" />
+    <ClInclude Include="FrameWork\FrameWorkBase.h" />
+    <ClInclude Include="FrameWork\OutPutLogModule.h" />
+    <ClInclude Include="FrameWork\Prerequisites.h" />
+    <ClInclude Include="InitializeGuide.h" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Assets\Shaders\shaders.hlsl">

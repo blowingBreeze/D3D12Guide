@@ -13,17 +13,32 @@
     <Filter Include="Assets\Shaders">
       <UniqueIdentifier>{b5d4b7cc-3960-49d9-ac29-8a50b5b4c9a3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="InitializeGuide">
+      <UniqueIdentifier>{b9a6020d-64af-45a0-8248-42b5847d905b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
       <Filter>Main</Filter>
     </ClCompile>
-    <ClCompile Include="FrameWorkBase.cpp">
+    <ClCompile Include="FrameWork\FrameWorkBase.cpp">
       <Filter>FrameWork</Filter>
+    </ClCompile>
+    <ClCompile Include="InitializeGuide\InitializeGuide.cpp">
+      <Filter>InitializeGuide</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FrameWorkBase.h">
+    <ClInclude Include="InitializeGuide.h">
+      <Filter>InitializeGuide</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameWork\FrameWorkBase.h">
+      <Filter>FrameWork</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameWork\OutPutLogModule.h">
+      <Filter>FrameWork</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameWork\Prerequisites.h">
       <Filter>FrameWork</Filter>
     </ClInclude>
   </ItemGroup>

@@ -21,6 +21,16 @@ FrameWorkBase::FrameWorkBase()
     mScissorRect.bottom = 768;
 }
 
+//static
+FrameWorkBase* FrameWorkBase::GetFrameWork()
+{
+    if (!mpFrameWork)
+    {
+        mpFrameWork = new FrameWorkBase;
+    }
+    return mpFrameWork;
+}
+
 void FrameWorkBase::Init(HINSTANCE hInstance, int nCmdShow)
 {
     InitWindow(hInstance, nCmdShow);
@@ -31,8 +41,14 @@ void FrameWorkBase::Init(HINSTANCE hInstance, int nCmdShow)
     InitDescriptorHeap();
     InitRenderTargets();
     InitRootSignature();
-    InitShader();
+    InitShaderAndPipeLine();
     InitVertex();
+}
+
+void FrameWorkBase::UnInit()
+{
+    WaitForPreviousFrame();
+    CloseHandle(mFenceEvent);
 }
 
 int FrameWorkBase::Run()
@@ -47,7 +63,14 @@ int FrameWorkBase::Run()
             DispatchMessage(&msg);
         }
     }
+
+    UnInit();
     return static_cast<char>(msg.wParam);
+}
+
+LRESULT FrameWorkBase::ExtendMsgHandler(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
 LRESULT FrameWorkBase::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -80,16 +103,21 @@ LRESULT FrameWorkBase::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
     }
 
     // Handle any messages the switch statement didn't.
-    return DefWindowProc(hWnd, message, wParam, lParam);
+    return mpFrameWork->ExtendMsgHandler(hWnd, message, wParam, lParam);
+}
+
+FrameWorkBase::~FrameWorkBase()
+{
 }
 
 void FrameWorkBase::InitWindow(HINSTANCE hInstance,int nCmdShow)
 {
+    mhMainInstance = hInstance;
     // Initialize the window class.
     WNDCLASSEX windowClass = { 0 };
     windowClass.cbSize = sizeof(WNDCLASSEX);
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
-    windowClass.lpfnWndProc = WindowProc;
+    windowClass.lpfnWndProc = mpFrameWork->WindowProc;
     windowClass.hInstance = hInstance;
     windowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
     windowClass.lpszClassName = L"D3D12Guide";
@@ -146,9 +174,7 @@ void FrameWorkBase::InitDevice()
 void FrameWorkBase::InitFence()
 {
     ThrowIfFailed(mD3DDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&mD3DFence)));
-    mRtvDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-    mDsvDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-    mCbvUavDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
 }
 
 void FrameWorkBase::InitGraphicsCommand()
@@ -169,25 +195,20 @@ void FrameWorkBase::InitSwapChain()
 {
     // Describe and create the swap chain.
     mSwapChain.Reset();
-    mSwapChainDesc.BufferDesc.Width = 1366;
-    mSwapChainDesc.BufferDesc.Height = 768;
-    mSwapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    mSwapChainDesc.BufferDesc.RefreshRate.Numerator = 60;
-    mSwapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
-    mSwapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER::DXGI_MODE_SCANLINE_ORDER_LOWER_FIELD_FIRST;
-    mSwapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING::DXGI_MODE_SCALING_CENTERED;
-    mSwapChainDesc.Windowed = true;
-    mSwapChainDesc.OutputWindow = mhMainWind;
     mSwapChainDesc.BufferCount = BUFFER_COUNT;
+    mSwapChainDesc.Width = mWidth;
+    mSwapChainDesc.Height = mHeight;
+    mSwapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     mSwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    mSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT::DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    mSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     mSwapChainDesc.SampleDesc.Count = 1;
-    mSwapChainDesc.SampleDesc.Quality = 0;
 
-    ComPtr<IDXGISwapChain> swapChain;
-    ThrowIfFailed(mD3DFactory->CreateSwapChain(
+    ComPtr<IDXGISwapChain1> swapChain;
+    ThrowIfFailed(mD3DFactory->CreateSwapChainForHwnd(
         mCommandQueue.Get(),       // Swap chain needs the queue so that it can force a flush on it.
+        mhMainWind,
         &mSwapChainDesc,
+        nullptr,nullptr,
         swapChain.GetAddressOf()
     ));
     ThrowIfFailed(swapChain.As(&mSwapChain));
@@ -208,6 +229,10 @@ void FrameWorkBase::InitDescriptorHeap()
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     dsvHeapDesc.NodeMask = 0;
     ThrowIfFailed(mD3DDevice->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
+
+    mRtvDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    mDsvDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+    mCbvUavDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 void FrameWorkBase::InitRenderTargets()
@@ -238,7 +263,7 @@ void FrameWorkBase::InitRootSignature()
     ThrowIfFailed(mD3DDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&mRootSignature)));
 }
 
-void FrameWorkBase::InitShader()
+void FrameWorkBase::InitShaderAndPipeLine()
 {
     ComPtr<ID3DBlob> vertexShader;
     ComPtr<ID3DBlob> pixelShader;
@@ -314,91 +339,66 @@ void FrameWorkBase::InitShader()
     psoDesc.SampleDesc.Count = 1;
     psoDesc.SampleDesc.Quality = 0;
     ThrowIfFailed(mD3DDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPipelineState)));
-
-    // Create the command list.
-    ThrowIfFailed(mD3DDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, mDirectCmdListAlloc.Get(), mPipelineState.Get(), IID_PPV_ARGS(&mCommandList)));
-
-    // Command lists are created in the recording state, but there is nothing
-    // to record yet. The main loop expects it to be closed, so close it now.
-    ThrowIfFailed(mCommandList->Close());
 }
 
 void FrameWorkBase::InitVertex()
 {
-    // Create the vertex buffer.
+    // Define the geometry for a triangle.
+    Vertex triangleVertices[] =
     {
-        // Define the geometry for a triangle.
-        Vertex triangleVertices[] =
-        {
-            { { 0.0f, 0.25f, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-            { { 0.25f, -0.25f , 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-            { { -0.25f, -0.25f , 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
-        };
+        { { 0.0f, 0.25f, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { { 0.25f, -0.25f , 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
+        { { -0.25f, -0.25f , 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
+    };
 
-        const UINT vertexBufferSize = sizeof(triangleVertices);
+    const UINT vertexBufferSize = sizeof(triangleVertices);
 
-        D3D12_HEAP_PROPERTIES heapPropties;
-        heapPropties.Type = D3D12_HEAP_TYPE:: D3D12_HEAP_TYPE_UPLOAD;
-        heapPropties.CPUPageProperty =D3D12_CPU_PAGE_PROPERTY::D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-        heapPropties.MemoryPoolPreference = D3D12_MEMORY_POOL::D3D12_MEMORY_POOL_UNKNOWN;
-        heapPropties.CreationNodeMask = 1;
-        heapPropties.VisibleNodeMask = 1;
+    D3D12_HEAP_PROPERTIES heapPropties;
+    heapPropties.Type = D3D12_HEAP_TYPE:: D3D12_HEAP_TYPE_UPLOAD;
+    heapPropties.CPUPageProperty =D3D12_CPU_PAGE_PROPERTY::D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    heapPropties.MemoryPoolPreference = D3D12_MEMORY_POOL::D3D12_MEMORY_POOL_UNKNOWN;
+    heapPropties.CreationNodeMask = 1;
+    heapPropties.VisibleNodeMask = 1;
 
-        D3D12_RESOURCE_DESC resourceDesc;
-        resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
-        resourceDesc.Alignment = 0;
-        resourceDesc.Width = vertexBufferSize;
-        resourceDesc.Height = 1;
-        resourceDesc.DepthOrArraySize = 1;
-        resourceDesc.MipLevels = 1;
-        resourceDesc.Format = DXGI_FORMAT::DXGI_FORMAT_UNKNOWN;
-        resourceDesc.SampleDesc.Count = 1;
-        resourceDesc.SampleDesc.Quality = 0;
-        resourceDesc.Layout = D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        resourceDesc.Flags = D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
+    D3D12_RESOURCE_DESC resourceDesc;
+    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
+    resourceDesc.Alignment = 0;
+    resourceDesc.Width = vertexBufferSize;
+    resourceDesc.Height = 1;
+    resourceDesc.DepthOrArraySize = 1;
+    resourceDesc.MipLevels = 1;
+    resourceDesc.Format = DXGI_FORMAT::DXGI_FORMAT_UNKNOWN;
+    resourceDesc.SampleDesc.Count = 1;
+    resourceDesc.SampleDesc.Quality = 0;
+    resourceDesc.Layout = D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    resourceDesc.Flags = D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
 
-        // Note: using upload heaps to transfer static data like vert buffers is not 
-        // recommended. Every time the GPU needs it, the upload heap will be marshalled 
-        // over. Please read up on Default Heap usage. An upload heap is used here for 
-        // code simplicity and because there are very few verts to actually transfer.
-        ThrowIfFailed(mD3DDevice->CreateCommittedResource(
-            &heapPropties,
-            D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
-            &resourceDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&mVertexBuffer)));
+    // Note: using upload heaps to transfer static data like vert buffers is not 
+    // recommended. Every time the GPU needs it, the upload heap will be marshalled 
+    // over. Please read up on Default Heap usage. An upload heap is used here for 
+    // code simplicity and because there are very few verts to actually transfer.
+    ThrowIfFailed(mD3DDevice->CreateCommittedResource(
+        &heapPropties,
+        D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
+        &resourceDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&mVertexBuffer)));
 
-        // Copy the triangle data to the vertex buffer.
-        UINT8* pVertexDataBegin;
-        D3D12_RANGE readRange;        // We do not intend to read from this resource on the CPU.
-        readRange.Begin = 0;
-        readRange.End = 0;
+    // Copy the triangle data to the vertex buffer.
+    UINT8* pVertexDataBegin;
+    D3D12_RANGE readRange;        // We do not intend to read from this resource on the CPU.
+    readRange.Begin = 0;
+    readRange.End = 0;
 
-        ThrowIfFailed(mVertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
-        memcpy(pVertexDataBegin, triangleVertices, sizeof(triangleVertices));
-        mVertexBuffer->Unmap(0, nullptr);
+    ThrowIfFailed(mVertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
+    memcpy(pVertexDataBegin, triangleVertices, sizeof(triangleVertices));
+    mVertexBuffer->Unmap(0, nullptr);
 
-        // Initialize the vertex buffer view.
-        mVertexBufferView.BufferLocation = mVertexBuffer->GetGPUVirtualAddress();
-        mVertexBufferView.StrideInBytes = sizeof(Vertex);
-        mVertexBufferView.SizeInBytes = vertexBufferSize;
-
-        ThrowIfFailed(mD3DDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&mD3DFence)));
-        mFenceValue = 1;
-
-        // Create an event handle to use for frame synchronization.
-        mFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        if (mFenceEvent == nullptr)
-        {
-            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
-        }
-
-        // Wait for the command list to execute; we are reusing the same command 
-        // list in our main loop but for now, we just want to wait for setup to 
-        // complete before continuing.
-        WaitForPreviousFrame();
-    }
+    // Initialize the vertex buffer view.
+    mVertexBufferView.BufferLocation = mVertexBuffer->GetGPUVirtualAddress();
+    mVertexBufferView.StrideInBytes = sizeof(Vertex);
+    mVertexBufferView.SizeInBytes = vertexBufferSize;
 }
 
 void FrameWorkBase::WaitForPreviousFrame()
@@ -488,4 +488,6 @@ void FrameWorkBase::PopulateCommandList()
 
     ThrowIfFailed(mCommandList->Close());
 }
+
+FrameWorkBase* FrameWorkBase::mpFrameWork = nullptr;
 

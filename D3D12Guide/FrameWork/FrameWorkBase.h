@@ -1,25 +1,26 @@
 #pragma once
+#include "Prerequisites.h"
 
-
-#include <stdexcept>
-#include <wrl.h>
-#include <d3d12.h>
-#include <dxgi1_4.h>
-#include <d3dcompiler.h>
-#include <DirectXMath.h>
-
-using namespace Microsoft::WRL;
-using namespace DirectX;
-
-static const int BUFFER_COUNT = 2;
 class FrameWorkBase
 {
 public:
-    FrameWorkBase();
     virtual void Init(HINSTANCE hInstance,int nCmdShow);
+    virtual void UnInit();
     virtual int Run();
-    static LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+    virtual void OnUpdate();
+    virtual void OnRender();
+
+    virtual LRESULT CALLBACK ExtendMsgHandler(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+    virtual ~FrameWorkBase();
+public:
+
+
 protected:
+    static FrameWorkBase* GetFrameWork();
+    FrameWorkBase();
+
+private:
+    static LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
     void InitWindow(HINSTANCE hInstance, int nCmdShow);
     void InitDevice();
     void InitFence();
@@ -28,7 +29,7 @@ protected:
     void InitDescriptorHeap();
     void InitRenderTargets();
     void InitRootSignature();
-    void InitShader();
+    void InitShaderAndPipeLine();
     void InitVertex();
 
 protected:
@@ -36,17 +37,15 @@ protected:
     void PopulateCommandList();
 
 protected:
-    void OnUpdate();
-    void OnRender();
-
-protected:
-    HWND mhMainWind;
-    UINT mWidth;
-    UINT mHeight;
-    DXGI_SWAP_CHAIN_DESC  mSwapChainDesc;
-    UINT64 mFenceValue;
-    HANDLE mFenceEvent;
-    UINT mFrameIndex;
+    static FrameWorkBase* mpFrameWork;
+    HINSTANCE mhMainInstance = nullptr;
+    HWND mhMainWind = nullptr;
+    UINT mWidth = 0;
+    UINT mHeight = 0;
+    DXGI_SWAP_CHAIN_DESC1  mSwapChainDesc = {};
+    UINT64 mFenceValue = 0;
+    HANDLE mFenceEvent = nullptr;
+    UINT mFrameIndex = 0;
 
     struct Vertex
     {
@@ -75,27 +74,3 @@ protected:
     ComPtr<ID3D12Resource> mVertexBuffer;
     D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
 };
-
-inline std::string HrToString(HRESULT hr)
-{
-    char s_str[64] = {};
-    sprintf_s(s_str, "HRESULT of 0x%08X", static_cast<UINT>(hr));
-    return std::string(s_str);
-}
-
-class HrException : public std::runtime_error
-{
-public:
-    HrException(HRESULT hr) : std::runtime_error(HrToString(hr)), m_hr(hr) {}
-    HRESULT Error() const { return m_hr; }
-private:
-    const HRESULT m_hr;
-};
-
-inline void ThrowIfFailed(HRESULT hr)
-{
-    if (FAILED(hr))
-    {
-        throw HrException(hr);
-    }
-}
