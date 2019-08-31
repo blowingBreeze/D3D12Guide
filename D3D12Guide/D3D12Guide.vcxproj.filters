@@ -16,6 +16,12 @@
     <Filter Include="InitializeGuide">
       <UniqueIdentifier>{b9a6020d-64af-45a0-8248-42b5847d905b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DrawCube">
+      <UniqueIdentifier>{b7a871a0-7063-4bec-910b-4f896e3d50fb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FrameWork\Utils">
+      <UniqueIdentifier>{bdda09af-5c97-4aa6-a057-bb5054b195e1}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -27,23 +33,50 @@
     <ClCompile Include="InitializeGuide\InitializeGuide.cpp">
       <Filter>InitializeGuide</Filter>
     </ClCompile>
+    <ClCompile Include="DrawCube\DrawCube.cpp">
+      <Filter>DrawCube</Filter>
+    </ClCompile>
+    <ClCompile Include="FrameWork\D3DUtil.cpp">
+      <Filter>FrameWork\Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="FrameWork\MathHelper.cpp">
+      <Filter>FrameWork\Utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="InitializeGuide.h">
-      <Filter>InitializeGuide</Filter>
-    </ClInclude>
     <ClInclude Include="FrameWork\FrameWorkBase.h">
       <Filter>FrameWork</Filter>
     </ClInclude>
-    <ClInclude Include="FrameWork\OutPutLogModule.h">
-      <Filter>FrameWork</Filter>
+    <ClInclude Include="DrawCube\DrawCube.h">
+      <Filter>DrawCube</Filter>
+    </ClInclude>
+    <ClInclude Include="InitializeGuide\InitializeGuide.h">
+      <Filter>InitializeGuide</Filter>
     </ClInclude>
     <ClInclude Include="FrameWork\Prerequisites.h">
-      <Filter>FrameWork</Filter>
+      <Filter>FrameWork\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameWork\OutPutLogModule.h">
+      <Filter>FrameWork\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameWork\MeshType.h">
+      <Filter>FrameWork\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameWork\D3DUtil.h">
+      <Filter>FrameWork\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameWork\UploadBuffer.h">
+      <Filter>FrameWork\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameWork\MathHelper.h">
+      <Filter>FrameWork\Utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Assets\Shaders\shaders.hlsl">
+      <Filter>Assets\Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="Assets\Shaders\cube.hlsl">
       <Filter>Assets\Shaders</Filter>
     </CustomBuild>
   </ItemGroup>

@@ -5,7 +5,10 @@
 #include <wrl.h>
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
+#include <DirectXColors.h>
+#include "d3dx12.h"
 #include "OutPutLogModule.h"
+
 
 using namespace Microsoft::WRL;
 using namespace DirectX;

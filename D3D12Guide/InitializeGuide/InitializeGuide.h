@@ -1,11 +1,22 @@
 #pragma once
 #include "../FrameWork/FrameWorkBase.h"
 class InitializeGuide :
-    private FrameWorkBase
+    public FrameWorkBase
 {
 public:
-    InitializeGuide();
-     virtual void Init(HINSTANCE hInstance, int nCmdShow) override;
-     virtual int Run() override;
+    InitializeGuide(HINSTANCE hInstance)
+        :FrameWorkBase(hInstance)
+    {
+
+    }
+
+protected:
+    virtual void Init();
+    virtual void OnRender();
+
+private:
+    void BuildRootSignature();
+    void BuildTriangles();
+    void BuildPSO();
 };
 

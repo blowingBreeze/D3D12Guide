@@ -1,4 +1,5 @@
 #include "FrameWorkBase.h"
+#include <Windowsx.h>
 #include <string>
 
 FrameWorkBase::FrameWorkBase()
@@ -6,19 +7,19 @@ FrameWorkBase::FrameWorkBase()
     mRtvDescriptorSize(0), mDsvDescriptorSize(0), mCbvUavDescriptorSize(0),
     mhMainWind(nullptr),
     mViewport(), mScissorRect(),
-    mFrameIndex(0)
+    mBackBufferIndex(0)
 {
-    mViewport.TopLeftX = 0;
-    mViewport.TopLeftY = 0;
-    mViewport.Width = 1366;
-    mViewport.Height = 768;
-    mViewport.MinDepth = D3D12_MIN_DEPTH;
-    mViewport.MaxDepth = D3D12_MAX_DEPTH;
+}
 
-    mScissorRect.left = 0;
-    mScissorRect.top = 0;
-    mScissorRect.right = 1366;
-    mScissorRect.bottom = 768;
+FrameWorkBase::FrameWorkBase(HINSTANCE hInstance)
+    :mWidth(1366), mHeight(768),
+    mRtvDescriptorSize(0), mDsvDescriptorSize(0), mCbvUavDescriptorSize(0),
+    mhMainWind(nullptr),
+    mViewport(), mScissorRect(),
+    mBackBufferIndex(0),
+    mhMainInstance(hInstance)
+{
+    mpFrameWork = this;
 }
 
 //static
@@ -31,24 +32,24 @@ FrameWorkBase* FrameWorkBase::GetFrameWork()
     return mpFrameWork;
 }
 
-void FrameWorkBase::Init(HINSTANCE hInstance, int nCmdShow)
+void FrameWorkBase::Init()
 {
-    InitWindow(hInstance, nCmdShow);
+    InitWindow();
     InitDevice();
     InitFence();
     InitGraphicsCommand();
+
+    ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+    
     InitSwapChain();
-    InitDescriptorHeap();
+    InitRtvAndDsvDescriptorHeaps();
     InitRenderTargets();
-    InitRootSignature();
-    InitShaderAndPipeLine();
-    InitVertex();
+    InitDepstencil();
 }
 
 void FrameWorkBase::UnInit()
 {
     WaitForPreviousFrame();
-    CloseHandle(mFenceEvent);
 }
 
 int FrameWorkBase::Run()
@@ -57,27 +58,29 @@ int FrameWorkBase::Run()
     while (msg.message != WM_QUIT)
     {
         // Process any messages in the queue.
-        if (PeekMessage(&msg, mhMainWind, 0, 0, PM_REMOVE))
+        // If there are Window messages then process them.
+        if (PeekMessage(&msg, 0,0 ,0, PM_REMOVE))
         {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
+        OnUpdate();
+        OnRender();
     }
 
     UnInit();
-    return static_cast<char>(msg.wParam);
+    return (int)msg.wParam;
 }
 
 LRESULT FrameWorkBase::ExtendMsgHandler(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    return DefWindowProc(hWnd, message, wParam, lParam);
-}
-
-LRESULT FrameWorkBase::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    FrameWorkBase* pFrameWork = reinterpret_cast<FrameWorkBase*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
     switch (message)
     {
+    case WM_ACTIVATE:
+    {
+
+    }
+    return 0;
     case WM_CREATE:
     {
         // Save the pFrameWork* passed in to CreateWindow.
@@ -86,15 +89,21 @@ LRESULT FrameWorkBase::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
     }
     return 0;
 
-    case WM_KEYDOWN:
+    case WM_LBUTTONDOWN:
+    case WM_MBUTTONDOWN:
+    case WM_RBUTTONDOWN:
+        OnMouseDown(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         return 0;
-
-    case WM_KEYUP:
+    case WM_LBUTTONUP:
+    case WM_MBUTTONUP:
+    case WM_RBUTTONUP:
+        OnMouseUp(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        return 0;
+    case WM_MOUSEMOVE:
+        OnMouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         return 0;
 
     case WM_PAINT:
-        pFrameWork->OnUpdate();
-        pFrameWork->OnRender();
         return 0;
 
     case WM_DESTROY:
@@ -103,44 +112,54 @@ LRESULT FrameWorkBase::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
     }
 
     // Handle any messages the switch statement didn't.
-    return mpFrameWork->ExtendMsgHandler(hWnd, message, wParam, lParam);
+    return DefWindowProc(hWnd, message, wParam, lParam);
+}
+
+LRESULT FrameWorkBase::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    return FrameWorkBase::GetFrameWork()->ExtendMsgHandler(hWnd, message, wParam, lParam);
 }
 
 FrameWorkBase::~FrameWorkBase()
 {
 }
 
-void FrameWorkBase::InitWindow(HINSTANCE hInstance,int nCmdShow)
+void FrameWorkBase::InitWindow()
 {
-    mhMainInstance = hInstance;
-    // Initialize the window class.
-    WNDCLASSEX windowClass = { 0 };
-    windowClass.cbSize = sizeof(WNDCLASSEX);
-    windowClass.style = CS_HREDRAW | CS_VREDRAW;
-    windowClass.lpfnWndProc = mpFrameWork->WindowProc;
-    windowClass.hInstance = hInstance;
-    windowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
-    windowClass.lpszClassName = L"D3D12Guide";
-    RegisterClassEx(&windowClass);
+    WNDCLASS wc;
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = WindowProc;
+    wc.cbClsExtra = 0;
+    wc.cbWndExtra = 0;
+    wc.hInstance = mhMainInstance;
+    wc.hIcon = LoadIcon(0, IDI_APPLICATION);
+    wc.hCursor = LoadCursor(0, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)GetStockObject(NULL_BRUSH);
+    wc.lpszMenuName = 0;
+    wc.lpszClassName = L"D3D12Guide";
+    if (!RegisterClass(&wc))
+    {
+        MessageBox(0, L"RegisterClass Failed.", 0, 0);
+        return;
+    }
 
     RECT windowRect = { 0, 0, static_cast<LONG>(this->mWidth), static_cast<LONG>(this->mHeight) };
     AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
     // Create the window and store a handle to it.
     mhMainWind = CreateWindow(
-        windowClass.lpszClassName,
-        L"D3DGuide",
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT,
-        CW_USEDEFAULT,
-        windowRect.right - windowRect.left,
-        windowRect.bottom - windowRect.top,
-        nullptr,        // We have no parent window.
-        nullptr,        // We aren't using menus.
-        hInstance,
-        this);
+        L"D3D12Guide",
+        L"D3D12Guide",
+        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, mWidth, mHeight, 0, 0, mhMainInstance, 0);
 
-    ShowWindow(mhMainWind, nCmdShow);
+    if (!mhMainWind)
+    {
+        MessageBox(0, L"CreateWindow Failed.", 0, 0);
+        return;
+    }
+
+    ShowWindow(mhMainWind, SW_SHOW);
+    UpdateWindow(mhMainWind);
 }
 
 void FrameWorkBase::InitDevice()
@@ -169,6 +188,10 @@ void FrameWorkBase::InitDevice()
         ThrowIfFailed(mD3DFactory->EnumWarpAdapter(IID_PPV_ARGS(&pWarpAdapter)));//enum all wrap adapter,use the first one
         ThrowIfFailed(D3D12CreateDevice(pWarpAdapter.Get(),D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&mD3DDevice)));
     }
+
+    mRtvDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    mDsvDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+    mCbvUavDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 void FrameWorkBase::InitFence()
@@ -198,7 +221,7 @@ void FrameWorkBase::InitSwapChain()
     mSwapChainDesc.BufferCount = BUFFER_COUNT;
     mSwapChainDesc.Width = mWidth;
     mSwapChainDesc.Height = mHeight;
-    mSwapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    mSwapChainDesc.Format = mBackBufferFormat;
     mSwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     mSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     mSwapChainDesc.SampleDesc.Count = 1;
@@ -214,7 +237,7 @@ void FrameWorkBase::InitSwapChain()
     ThrowIfFailed(swapChain.As(&mSwapChain));
 }
 
-void FrameWorkBase::InitDescriptorHeap()
+void FrameWorkBase::InitRtvAndDsvDescriptorHeaps()
 {
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
     rtvHeapDesc.NumDescriptors = mSwapChainDesc.BufferCount;
@@ -222,17 +245,13 @@ void FrameWorkBase::InitDescriptorHeap()
     rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     rtvHeapDesc.NodeMask = 0;
     ThrowIfFailed(mD3DDevice->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
-    
+
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
     dsvHeapDesc.NumDescriptors = 1;
     dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     dsvHeapDesc.NodeMask = 0;
     ThrowIfFailed(mD3DDevice->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
-
-    mRtvDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-    mDsvDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-    mCbvUavDescriptorSize = mD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 void FrameWorkBase::InitRenderTargets()
@@ -248,245 +267,66 @@ void FrameWorkBase::InitRenderTargets()
     }
 }
 
-void FrameWorkBase::InitRootSignature()
+void FrameWorkBase::InitDepstencil()
 {
-    D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc;
-    rootSignatureDesc.NumParameters = 0;
-    rootSignatureDesc.NumStaticSamplers = 0;
-    rootSignatureDesc.pParameters = nullptr;
-    rootSignatureDesc.pStaticSamplers = nullptr;
-    rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    D3D12_RESOURCE_DESC depthStencilDesc;
+    depthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    depthStencilDesc.Alignment = 0;
+    depthStencilDesc.Width = mWidth;
+    depthStencilDesc.Height = mHeight;
+    depthStencilDesc.DepthOrArraySize = 1;
+    depthStencilDesc.MipLevels = 1;
 
-    ComPtr<ID3DBlob> signature;
-    ComPtr<ID3DBlob> error;
-    ThrowIfFailed(D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error));
-    ThrowIfFailed(mD3DDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&mRootSignature)));
-}
+    depthStencilDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
+    depthStencilDesc.SampleDesc.Count = 1;
+    depthStencilDesc.SampleDesc.Quality = 0;
+    depthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    depthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
-void FrameWorkBase::InitShaderAndPipeLine()
-{
-    ComPtr<ID3DBlob> vertexShader;
-    ComPtr<ID3DBlob> pixelShader;
+    D3D12_CLEAR_VALUE optClear;
+    optClear.Format = mDepthStencilFormat;
+    optClear.DepthStencil.Depth = 1.0f;
+    optClear.DepthStencil.Stencil = 0;
 
-#if defined(_DEBUG)
-    // Enable better shader debugging with the graphics debugging tools.
-    UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-    UINT compileFlags = 0;
-#endif
-
-    ThrowIfFailed(D3DCompileFromFile(std::wstring(L"./Assets/Shaders/shaders.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
-    ThrowIfFailed(D3DCompileFromFile(std::wstring(L"./Assets/Shaders/shaders.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
-
-    // Define the vertex input layout.
-    D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
-    {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-    };
-
-    D3D12_SHADER_BYTECODE vs;
-    vs.pShaderBytecode = vertexShader.Get()->GetBufferPointer();
-    vs.BytecodeLength = vertexShader.Get()->GetBufferSize();
-
-    D3D12_SHADER_BYTECODE ps;
-    ps.pShaderBytecode = pixelShader.Get()->GetBufferPointer();
-    ps.BytecodeLength = pixelShader.Get()->GetBufferSize();
-
-    D3D12_RASTERIZER_DESC rasterizerState;
-    rasterizerState.FillMode = D3D12_FILL_MODE::D3D12_FILL_MODE_SOLID;
-    rasterizerState.CullMode = D3D12_CULL_MODE::D3D12_CULL_MODE_BACK;
-    rasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    rasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-    rasterizerState.FrontCounterClockwise = FALSE;
-    rasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-    rasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-    rasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-    rasterizerState.DepthClipEnable = TRUE;
-    rasterizerState.MultisampleEnable = FALSE;
-    rasterizerState.AntialiasedLineEnable = FALSE;
-    rasterizerState.ForcedSampleCount = 0;
-    rasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-
-    D3D12_BLEND_DESC blendDesc;
-    blendDesc.AlphaToCoverageEnable = FALSE;
-    blendDesc.IndependentBlendEnable = FALSE;
-    const D3D12_RENDER_TARGET_BLEND_DESC defaultRenderTargetBlendDesc =
-    {
-        FALSE,FALSE,
-        D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-        D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-        D3D12_LOGIC_OP_NOOP,
-        D3D12_COLOR_WRITE_ENABLE_ALL,
-    };
-    for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
-        blendDesc.RenderTarget[i] = defaultRenderTargetBlendDesc;
-
-    // Describe and create the graphics pipeline state object (PSO).
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-    psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
-    psoDesc.pRootSignature = mRootSignature.Get();
-    psoDesc.VS = vs;
-    psoDesc.PS = ps;
-    psoDesc.RasterizerState = rasterizerState;
-    psoDesc.BlendState = blendDesc;
-    psoDesc.DepthStencilState.DepthEnable = FALSE;
-    psoDesc.DepthStencilState.StencilEnable = FALSE;
-    psoDesc.SampleMask = UINT_MAX;
-    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    psoDesc.NumRenderTargets = 1;
-    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-    psoDesc.SampleDesc.Count = 1;
-    psoDesc.SampleDesc.Quality = 0;
-    ThrowIfFailed(mD3DDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPipelineState)));
-}
-
-void FrameWorkBase::InitVertex()
-{
-    // Define the geometry for a triangle.
-    Vertex triangleVertices[] =
-    {
-        { { 0.0f, 0.25f, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-        { { 0.25f, -0.25f , 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-        { { -0.25f, -0.25f , 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
-    };
-
-    const UINT vertexBufferSize = sizeof(triangleVertices);
-
-    D3D12_HEAP_PROPERTIES heapPropties;
-    heapPropties.Type = D3D12_HEAP_TYPE:: D3D12_HEAP_TYPE_UPLOAD;
-    heapPropties.CPUPageProperty =D3D12_CPU_PAGE_PROPERTY::D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-    heapPropties.MemoryPoolPreference = D3D12_MEMORY_POOL::D3D12_MEMORY_POOL_UNKNOWN;
-    heapPropties.CreationNodeMask = 1;
-    heapPropties.VisibleNodeMask = 1;
-
-    D3D12_RESOURCE_DESC resourceDesc;
-    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
-    resourceDesc.Alignment = 0;
-    resourceDesc.Width = vertexBufferSize;
-    resourceDesc.Height = 1;
-    resourceDesc.DepthOrArraySize = 1;
-    resourceDesc.MipLevels = 1;
-    resourceDesc.Format = DXGI_FORMAT::DXGI_FORMAT_UNKNOWN;
-    resourceDesc.SampleDesc.Count = 1;
-    resourceDesc.SampleDesc.Quality = 0;
-    resourceDesc.Layout = D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    resourceDesc.Flags = D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
-
-    // Note: using upload heaps to transfer static data like vert buffers is not 
-    // recommended. Every time the GPU needs it, the upload heap will be marshalled 
-    // over. Please read up on Default Heap usage. An upload heap is used here for 
-    // code simplicity and because there are very few verts to actually transfer.
     ThrowIfFailed(mD3DDevice->CreateCommittedResource(
-        &heapPropties,
-        D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
-        &resourceDesc,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        nullptr,
-        IID_PPV_ARGS(&mVertexBuffer)));
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &depthStencilDesc,
+        D3D12_RESOURCE_STATE_COMMON,
+        &optClear,
+        IID_PPV_ARGS(mDepthStencilBuffer.GetAddressOf())));
 
-    // Copy the triangle data to the vertex buffer.
-    UINT8* pVertexDataBegin;
-    D3D12_RANGE readRange;        // We do not intend to read from this resource on the CPU.
-    readRange.Begin = 0;
-    readRange.End = 0;
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
+    dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+    dsvDesc.Format = mDepthStencilFormat;
+    dsvDesc.Texture2D.MipSlice = 0;
+    // Create descriptor to mip level 0 of entire resource using the
+    // format of the resource.
+    mD3DDevice->CreateDepthStencilView(mDepthStencilBuffer.Get(), &dsvDesc, DepthStencilView());
 
-    ThrowIfFailed(mVertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
-    memcpy(pVertexDataBegin, triangleVertices, sizeof(triangleVertices));
-    mVertexBuffer->Unmap(0, nullptr);
 
-    // Initialize the vertex buffer view.
-    mVertexBufferView.BufferLocation = mVertexBuffer->GetGPUVirtualAddress();
-    mVertexBufferView.StrideInBytes = sizeof(Vertex);
-    mVertexBufferView.SizeInBytes = vertexBufferSize;
+    // Transition the resource from its initial state to be used as a depth buffer.
+    mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mDepthStencilBuffer.Get(),
+        D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE));
 }
 
 void FrameWorkBase::WaitForPreviousFrame()
 {
-    // WAITING FOR THE FRAME TO COMPLETE BEFORE CONTINUING IS NOT BEST PRACTICE.
-    // Signal and increment the fence value.
-    const UINT64 fence = mFenceValue;
-    ThrowIfFailed(mCommandQueue->Signal(mD3DFence.Get(), fence));
     mFenceValue++;
 
+    // WAITING FOR THE FRAME TO COMPLETE BEFORE CONTINUING IS NOT BEST PRACTICE.
+    // Signal and increment the fence value.
+    ThrowIfFailed(mCommandQueue->Signal(mD3DFence.Get(), mFenceValue));
+
     // Wait until the previous frame is finished.
-    if (mD3DFence->GetCompletedValue() < fence)
+    if (mD3DFence->GetCompletedValue() < mFenceValue)
     {
-        ThrowIfFailed(mD3DFence->SetEventOnCompletion(fence, mFenceEvent));
-        WaitForSingleObject(mFenceEvent, INFINITE);
+        HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
+        ThrowIfFailed(mD3DFence->SetEventOnCompletion(mFenceValue, eventHandle));
+        WaitForSingleObject(eventHandle, INFINITE);
+        CloseHandle(eventHandle);
     }
-
-    mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
-}
-
-void FrameWorkBase::OnUpdate()
-{
-}
-
-void FrameWorkBase::OnRender()
-{
-    // Record all the commands we need to render the scene into the command list.
-    PopulateCommandList();
-
-    // Execute the command list.
-    ID3D12CommandList* ppCommandLists[] = { mCommandList.Get() };
-    mCommandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
-
-    // Present the frame.
-    ThrowIfFailed(mSwapChain->Present(1, 0));
-
-    WaitForPreviousFrame();
-}
-
-void FrameWorkBase::PopulateCommandList()
-{
-    // Command list allocators can only be reset when the associated 
-    // command lists have finished execution on the GPU; apps should use 
-    // fences to determine GPU execution progress.
-    ThrowIfFailed(mDirectCmdListAlloc->Reset());
-
-    // However, when ExecuteCommandList() is called on a particular command 
-    // list, that command list can then be reset at any time and must be before 
-    // re-recording.
-    ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), mPipelineState.Get()));
-
-    // Set necessary state.
-    mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
-    mCommandList->RSSetViewports(1, &mViewport);
-    mCommandList->RSSetScissorRects(1, &mScissorRect);
-
-    D3D12_RESOURCE_BARRIER resourceBarrier;
-    resourceBarrier.Transition.pResource = mRenderTargets[mFrameIndex].Get();
-    resourceBarrier.Transition.StateBefore = D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_PRESENT;
-    resourceBarrier.Transition.StateAfter = D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_RENDER_TARGET;
-    resourceBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    resourceBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAGS::D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    resourceBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE::D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    // Indicate that the back buffer will be used as a render target.
-    mCommandList->ResourceBarrier(1, &resourceBarrier);
-
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle;
-    rtvHandle.ptr = mRtvHeap->GetCPUDescriptorHandleForHeapStart().ptr+ (INT64)mFrameIndex*(UINT64)mRtvDescriptorSize;
-    mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
-
-    // Record commands.
-    const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
-    mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-    mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    mCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
-    mCommandList->DrawInstanced(3, 1, 0, 0);
-
-    D3D12_RESOURCE_BARRIER resourceBarrier2;
-    resourceBarrier2.Transition.pResource = mRenderTargets[mFrameIndex].Get();
-    resourceBarrier2.Transition.StateBefore = D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_RENDER_TARGET;
-    resourceBarrier2.Transition.StateAfter = D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_PRESENT;
-    resourceBarrier2.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    resourceBarrier2.Flags = D3D12_RESOURCE_BARRIER_FLAGS::D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    resourceBarrier2.Type = D3D12_RESOURCE_BARRIER_TYPE::D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    // Indicate that the back buffer will now be used to present.
-    mCommandList->ResourceBarrier(1, &resourceBarrier2);
-
-    ThrowIfFailed(mCommandList->Close());
 }
 
 FrameWorkBase* FrameWorkBase::mpFrameWork = nullptr;
